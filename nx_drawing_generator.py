@@ -78,9 +78,10 @@ import NXOpen.Annotations
 import NXOpen.Drawings
 import NXOpen.Preferences
 
-MODEL = os.environ.get("NXDRAW_MODEL",
-                       os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                    "examples", "model3.prt"))
+MODEL = os.environ.get("NXDRAW_MODEL", "")
+if not MODEL:
+    raise RuntimeError("Set NXDRAW_MODEL to the part file path "
+                       "(or run via generate_drawing.cmd)")
 OUT_BASE = os.path.splitext(MODEL)[0] + "_dwg"
 DWG = OUT_BASE + ".prt"
 PDF = OUT_BASE + ".pdf"
@@ -906,8 +907,9 @@ def main():
     if getattr(geom, "n_circ_fail", 0):
         rep("NOTE: %d of %d circular edges could not be fitted (non-axis-aligned?)"
             % (geom.n_circ_fail, geom.n_circ))
-    for axis, coord, area in sorted(geom.planar_faces, key=lambda t: -t[2])[:10]:
-        say("  face: %s=%.5g area %.6g" % ("XYZ"[axis], coord, area))
+    if os.environ.get("NXDRAW_DEBUG"):
+        for axis, coord, area in sorted(geom.planar_faces, key=lambda t: -t[2])[:10]:
+            say("  face: %s=%.5g area %.6g" % ("XYZ"[axis], coord, area))
     specs = plan_dimensions(geom, holes, metric)
 
     w_mm = wp.PartUnits == NXOpen.BasePart.Units.Millimeters
