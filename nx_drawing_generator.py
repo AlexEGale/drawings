@@ -693,7 +693,7 @@ def reserves(specs, P):
         # annotation per Y14.5), so they add no band row of their own
         if sp.kind in ("linear", "pos", "datum") and not sp.skip:
             k = (sp.view_name, sp.side)
-            res[k] = max(res.get(k, 0.0), (12.0 + 8.0 * sp.row + 8.0) * P)
+            res[k] = max(res.get(k, 0.0), (12.0 + 10.0 * sp.row + 8.0) * P)
     return res
 
 
@@ -723,7 +723,7 @@ def solve_layout(geom, specs, field, obstacles, u, P):
                     if sp.kind in ("dia", "fcf") and not sp.skip)
 
     def cal(v):
-        return 30.0 * P if v in cal_views else 0.0
+        return 36.0 * P if v in cal_views else 0.0
 
     def try_scale(num, den):
         sc = float(num) / den * u
@@ -1019,7 +1019,7 @@ def main():
         """Text origin: dim band offset on the side axis, mid-span of the
         measured points along the other axis (text sits between its arrows)."""
         vr = lay["vrects"][sp.view_name]
-        off = (12.0 + 8.0 * sp.row) * P
+        off = (12.0 + 10.0 * sp.row) * P
         mid_x = (vr.x0 + vr.x1) / 2
         mid_y = (vr.y0 + vr.y1) / 2
         if pa is not None and pb is not None:
@@ -1034,6 +1034,17 @@ def main():
         if sp.side == "left":
             return (vr.x0 - off, mid_y)
         return (vr.x1 + off, mid_y)
+
+    def set_unidirectional(dim):
+        """ASME Y14.5 unidirectional system: all dimension text reads
+        horizontally from the bottom of the sheet (no leader-aligned or
+        rotated text)."""
+        try:
+            dp = dim.GetDimensionPreferences()
+            dp.TextOrientation = NXOpen.Annotations.TextOrientation.Horizontal
+            dim.SetDimensionPreferences(dp)
+        except Exception:
+            pass
 
     made = 0
     callout_x = {}      # view_name -> placed callout x positions
@@ -1054,9 +1065,10 @@ def main():
                     ox if sp.side in ("below", "above") else oy)
                 opt = NXOpen.Point3d(ox, oy, 0.0)
                 if sp.horizontal:
-                    wp.Dimensions.CreateHorizontalDimension(dd, opt)
+                    d = wp.Dimensions.CreateHorizontalDimension(dd, opt)
                 else:
-                    wp.Dimensions.CreateVerticalDimension(dd, opt)
+                    d = wp.Dimensions.CreateVerticalDimension(dd, opt)
+                set_unidirectional(d)
             elif sp.kind == "pos":
                 h = sp.hole
                 e0, p0 = sp.geo
@@ -1080,6 +1092,7 @@ def main():
                         d.ToleranceType = tt.Basic
                 except Exception:
                     sp.why = "placed, but basic style not applied"
+                set_unidirectional(d)
             elif sp.kind == "dia":
                 h = sp.hole
                 h_ax, v_ax, _ = VIEWDEF[sp.view_name]
@@ -1128,10 +1141,11 @@ def main():
                     except Exception:
                         say("  callout note failed:\n"
                             + traceback.format_exc().splitlines()[-1])
-                    oy = vr.y1 + band + 18 * P
+                    oy = vr.y1 + band + 24 * P
                     h["callout_origin"] = (sx, oy)
                     rdb.Origin.Origin.SetValue(None, None, NXOpen.Point3d(sx, oy, 0.0))
                     h["dim_obj"] = rdb.Commit()
+                    set_unidirectional(h["dim_obj"])
                 finally:
                     rdb.Destroy()
             elif sp.kind == "datum":
@@ -1241,8 +1255,10 @@ def main():
                         vr = lay["vrects"][sp.view_name]
                         if cx0 is None:
                             cx0, cy0 = vr.x1 + 20 * P, vr.y1 + 10 * P
+                        # below the two-line callout text (size + THRU/DEEP),
+                        # shifted right so the leader stub clears the frame
                         fcf.Origin.Origin.SetValue(
-                            None, None, NXOpen.Point3d(cx0, cy0 - 10 * P, 0.0))
+                            None, None, NXOpen.Point3d(cx0 + 4 * P, cy0 - 16 * P, 0.0))
                     else:
                         # qualification frame stacked directly under its datum
                         # symbol, leader to the same attach point (one group)
