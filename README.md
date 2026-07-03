@@ -44,6 +44,19 @@ the model rebuilds once. Formulas stay live: `p8=p5/2` updates whenever
 `p5` changes. Chain `generate_drawing.cmd` after it to get a drawing of
 each variant.
 
+## Use from an AI agent (MCP)
+
+`nx_mcp.py` is an MCP server (no dependencies — plain Python) exposing
+`generate_drawing`, `list_parameters`, and `edit_parameters`. Add to
+Cursor / Claude Code / any MCP client:
+
+```json
+{ "mcpServers": { "nx": { "command": "python", "args": ["C:\\path\\to\\nx_mcp.py"] } } }
+```
+
+Then ask the agent things like *"make the top hole 24 mm and regenerate
+the drawing"*. Each call runs a headless NX session (~1-2 min).
+
 ## Notes
 
 - Works for axis-aligned prismatic parts with holes; anything it can't
