@@ -1085,6 +1085,50 @@ def main():
         for s2, r in zip(lst, rows):
             s2.row = r
 
+    # Extension lines of outer-row dims cross every inner column on their way
+    # out, at the sheet coordinate of each attachment level. Inner dims' text
+    # must not sit on those levels (Y14.5: lines shall not cross dimension
+    # values). Collect each band's attachment levels per row.
+    band_attach = {}    # (view, side) -> list of (row, [free-axis coords])
+    for sp in specs:
+        if getattr(sp, "skip", True) or sp.kind not in ("linear", "pos"):
+            continue
+        if sp.kind == "linear":
+            _, pa_, _, pb_ = sp.geo
+            pts = [(pa_.X, pa_.Y, pa_.Z), (pb_.X, pb_.Y, pb_.Z)]
+        else:
+            _, pa_ = sp.geo
+            pts = [(pa_.X, pa_.Y, pa_.Z), sp.hole["center"]]
+        ci = 0 if sp.side in ("below", "above") else 1
+        coords = [model_to_sheet(sp.view_name, p)[ci] for p in pts]
+        band_attach.setdefault((sp.view_name, sp.side), []).append((sp.row, coords))
+
+    def dodge_extension_levels(sp, ox, oy):
+        """Shift text along its dimension line, within its span, off the
+        extension-line levels of outer rows and away from placed text."""
+        if sp.span * sc < 18 * P:
+            return ox, oy          # narrow: text already placed outside
+        key = (sp.view_name, sp.side)
+        conflicts = [c for (r, cs) in band_attach.get(key, [])
+                     if r > sp.row for c in cs]
+        conflicts += text_pos.get(key, [])
+        if not conflicts:
+            return ox, oy
+        ci = 0 if sp.side in ("below", "above") else 1
+        own = next(cs for (r, cs) in band_attach[key] if r == sp.row)
+        lo, hi = min(own) + 4 * P, max(own) - 4 * P
+        cur = (ox, oy)[ci]
+        if lo >= hi:
+            return ox, oy
+        best, best_d = cur, min(abs(cur - c) for c in conflicts)
+        if best_d < 4 * P:
+            for k in (4, -4, 8, -8, 12, -12, 16, -16):
+                cand = min(max(cur + k * P, lo), hi)
+                d = min(abs(cand - c) for c in conflicts)
+                if d > best_d:
+                    best, best_d = cand, d
+        return (best, oy) if ci == 0 else (ox, best)
+
     made = 0
     callout_x = {}      # view_name -> placed callout x positions
     datum_origins = {}  # letter -> sheet origin of the datum symbol
@@ -1102,6 +1146,7 @@ def main():
                 ox, oy = dim_origin(sp, (p0.X, p0.Y, p0.Z), (p1.X, p1.Y, p1.Z))
                 ox, oy = narrow_origin(sp, ox, oy,
                                        (p0.X, p0.Y, p0.Z), (p1.X, p1.Y, p1.Z))
+                ox, oy = dodge_extension_levels(sp, ox, oy)
                 text_pos.setdefault((sp.view_name, sp.side), []).append(
                     ox if sp.side in ("below", "above") else oy)
                 opt = NXOpen.Point3d(ox, oy, 0.0)
@@ -1120,6 +1165,7 @@ def main():
                 ox, oy = dim_origin(sp, (p0.X, p0.Y, p0.Z), h["center"])
                 ox, oy = narrow_origin(sp, ox, oy,
                                        (p0.X, p0.Y, p0.Z), h["center"])
+                ox, oy = dodge_extension_levels(sp, ox, oy)
                 text_pos.setdefault((sp.view_name, sp.side), []).append(
                     ox if sp.side in ("below", "above") else oy)
                 opt = NXOpen.Point3d(ox, oy, 0.0)
