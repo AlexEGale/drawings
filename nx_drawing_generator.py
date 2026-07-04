@@ -1069,6 +1069,22 @@ def main():
                 guard += 1
         return ox, oy
 
+    # Narrow dims (text placed outside the span) go to the OUTERMOST row of
+    # their band: an inner-row dim with outside text collides with the outer
+    # rows' lines and text by construction. Pure permutation of existing row
+    # numbers, so band reserves are unchanged.
+    by_band = {}
+    for sp in specs:
+        if not getattr(sp, "skip", True) and sp.kind in ("linear", "pos"):
+            by_band.setdefault((sp.view_name, sp.side), []).append(sp)
+    for lst in by_band.values():
+        if len(lst) < 2:
+            continue
+        rows = sorted(s2.row for s2 in lst)
+        lst.sort(key=lambda t: (t.span * sc < 18 * P, t.span))
+        for s2, r in zip(lst, rows):
+            s2.row = r
+
     made = 0
     callout_x = {}      # view_name -> placed callout x positions
     datum_origins = {}  # letter -> sheet origin of the datum symbol
