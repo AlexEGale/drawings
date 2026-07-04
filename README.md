@@ -7,6 +7,7 @@ Command-line tools for Siemens NX that run headless — no NX window:
   NX drawing (`.prt`) and a PDF.
 - **`params.cmd`** — see and change a model's parameters (NX expressions)
   from outside NX.
+- **`step.cmd`** — convert a part to STEP: `step.cmd model.prt [out.step] [242]`
 
 ## Setup
 

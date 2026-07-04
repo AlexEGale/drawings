@@ -121,6 +121,19 @@ def tool_edit_parameters(args):
     return text, failed
 
 
+def tool_export_step(args):
+    model = check_model(args)
+    out_path = args.get("output_path", "") or os.path.splitext(model)[0] + ".step"
+    ap = str(args.get("protocol", "242"))
+    log_txt = run_journal("nx_step.py",
+                          {"NXSTEP_MODEL": model, "NXSTEP_OUT": out_path,
+                           "NXSTEP_AP": ap})
+    if os.path.isfile(out_path):
+        return ("STEP written: %s (%d bytes, AP%s)"
+                % (out_path, os.path.getsize(out_path), ap)), False
+    return "STEP export failed — raw output:\n" + log_txt[-2000:], True
+
+
 TOOLS = [
     {
         "name": "generate_drawing",
@@ -175,6 +188,25 @@ TOOLS = [
             "required": ["model_path"],
         },
         "fn": tool_edit_parameters,
+    },
+    {
+        "name": "export_step",
+        "description": "Convert an NX part file to STEP (AP242 default; "
+                       "also AP214/AP203).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "model_path": {"type": "string",
+                               "description": "Absolute path to the .prt file"},
+                "output_path": {"type": "string",
+                                "description": "Output .step path (default: "
+                                               "next to the model)"},
+                "protocol": {"type": "string",
+                             "description": "203, 214, or 242 (default)"},
+            },
+            "required": ["model_path"],
+        },
+        "fn": tool_export_step,
     },
 ]
 
