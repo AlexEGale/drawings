@@ -1046,22 +1046,28 @@ def main():
         except Exception:
             pass
 
-    def set_narrow_if_tight(dim, paper_span):
-        """Narrow-dimension presentation when arrows + text cannot fit
-        between the extension lines (~18mm on paper): text offset above a
-        leader stub, per ASME narrow-dimension practice."""
-        if paper_span >= 18 * P:
-            return
-        try:
-            nd = NXOpen.Annotations.NarrowDimensionData()
-            nd.DisplayType = NXOpen.Annotations.NarrowDisplayOption.AboveStub
-            nd.TextOrientation = NXOpen.Annotations.NarrowTextOrientation.Horizontal
-            nd.TextOffset = 8.0 * P
-            nd.LeaderAngle = 60.0
-            dim.SetNarrowDimensionPreferences(nd)
-        except Exception:
-            say("  narrow prefs failed:\n"
-                + traceback.format_exc().splitlines()[-1])
+    def narrow_origin(sp, ox, oy, pa, pb):
+        """Arrows + text cannot fit between close extension lines (~18mm on
+        paper): move the text outside the span along the dimension line
+        (ASME narrow-dimension practice), dodging other text in the band."""
+        if sp.span * sc >= 18 * P:
+            return ox, oy
+        sa = model_to_sheet(sp.view_name, pa)
+        sb = model_to_sheet(sp.view_name, pb)
+        placed = text_pos.get((sp.view_name, sp.side), [])
+        if sp.horizontal:
+            ox = max(sa[0], sb[0]) + 9 * P
+            guard = 0
+            while guard < 12 and any(abs(ox - t) < 8 * P for t in placed):
+                ox += 8 * P
+                guard += 1
+        else:
+            oy = max(sa[1], sb[1]) + 9 * P
+            guard = 0
+            while guard < 12 and any(abs(oy - t) < 8 * P for t in placed):
+                oy += 8 * P
+                guard += 1
+        return ox, oy
 
     made = 0
     callout_x = {}      # view_name -> placed callout x positions
@@ -1078,6 +1084,8 @@ def main():
                 dd.SetAssociativity(1, [assoc(e0, view, p0, po.OnCurve)])
                 dd.SetAssociativity(2, [assoc(e1, view, p1, po.OnCurve)])
                 ox, oy = dim_origin(sp, (p0.X, p0.Y, p0.Z), (p1.X, p1.Y, p1.Z))
+                ox, oy = narrow_origin(sp, ox, oy,
+                                       (p0.X, p0.Y, p0.Z), (p1.X, p1.Y, p1.Z))
                 text_pos.setdefault((sp.view_name, sp.side), []).append(
                     ox if sp.side in ("below", "above") else oy)
                 opt = NXOpen.Point3d(ox, oy, 0.0)
@@ -1086,7 +1094,6 @@ def main():
                 else:
                     d = wp.Dimensions.CreateVerticalDimension(dd, opt)
                 set_unidirectional(d)
-                set_narrow_if_tight(d, sp.span * sc)
             elif sp.kind == "pos":
                 h = sp.hole
                 e0, p0 = sp.geo
@@ -1095,6 +1102,8 @@ def main():
                 dd.SetAssociativity(1, [assoc(e0, view, p0, po.OnCurve)])
                 dd.SetAssociativity(2, [assoc(h["edge"], view, cpt, po.ArcCenter)])
                 ox, oy = dim_origin(sp, (p0.X, p0.Y, p0.Z), h["center"])
+                ox, oy = narrow_origin(sp, ox, oy,
+                                       (p0.X, p0.Y, p0.Z), h["center"])
                 text_pos.setdefault((sp.view_name, sp.side), []).append(
                     ox if sp.side in ("below", "above") else oy)
                 opt = NXOpen.Point3d(ox, oy, 0.0)
@@ -1111,7 +1120,6 @@ def main():
                 except Exception:
                     sp.why = "placed, but basic style not applied"
                 set_unidirectional(d)
-                set_narrow_if_tight(d, sp.span * sc)
             elif sp.kind == "dia":
                 h = sp.hole
                 h_ax, v_ax, _ = VIEWDEF[sp.view_name]
