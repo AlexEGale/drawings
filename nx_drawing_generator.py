@@ -1104,10 +1104,13 @@ def main():
                 sx = hx + 16 * P
                 ext_xs = [model_to_sheet(sp.view_name, h2["center"])[0]
                           for h2 in holes if HOLE_VIEW[h2["axis"]] == sp.view_name]
+                # spacing must clear a whole neighbor group (frame ~44 wide)
+                # plus this callout's leader corridor, so the leader cannot
+                # pass through a neighbor's tolerance frame
                 used = callout_x.setdefault(sp.view_name, [])
                 guard = 0
                 while guard < 40 and (
-                        any(abs(sx - x0) < 46 * P for x0 in used)
+                        any(abs(sx - x0) < 58 * P for x0 in used)
                         or any(abs(sx - x0) < 8 * P for x0 in ext_xs)):
                     sx += 10 * P
                     guard += 1
@@ -1271,9 +1274,6 @@ def main():
                         vr = lay["vrects"][sp.view_name]
                         if ax0 is None:
                             ax0, ay0 = (vr.x0 + vr.x1) / 2, vr.y0 - 24 * P
-                        ld = am.CreateLeaderData()
-                        ld.Leader.SetValue(occ(e), view, pt)
-                        fcf.Leader.Leaders.Append(ld)
                         # frame beside/below the datum box (combined group,
                         # no extra band row); dodges obstacles and the
                         # adjacent band's dimension rows
@@ -1283,11 +1283,14 @@ def main():
                             cands = [(ax0 + 15 * P, ay0), (ax0 - 42 * P, ay0),
                                      (ax0, ay0 - 12 * P)]
                         else:
-                            # corner-escaped datum sits near the below band:
-                            # drop the frame beneath that band's rows
                             bel = lay["res"](sp.view_name, "below")
                             qy_deep = min(ay0, vr.y0 - bel) - 12 * P
-                            cands = [(ax0, qy_deep), (ax0 - 42 * P, qy_deep)]
+                            if text_pos.get((asp.view_name, asp.side)):
+                                # corner-escaped datum sits near the below
+                                # band: drop the frame beneath those rows
+                                cands = [(ax0, qy_deep), (ax0 - 42 * P, qy_deep)]
+                            else:
+                                cands = [(ax0, ay0 - 12 * P), (ax0, qy_deep)]
                         qx, qy = cands[-1]
                         for cx2, cy2 in cands:
                             r2 = Rect(cx2 - 2 * P, cy2 - 5 * P,
@@ -1297,8 +1300,38 @@ def main():
                             if any(r2.overlaps(o, pad=1.5 * P)
                                    for o in lay["obstacles"]):
                                 continue
+                            if any(r2.overlaps(v2, pad=1.5 * P)
+                                   for v2 in lay["vrects"].values()):
+                                continue
                             qx, qy = cx2, cy2
                             break
+                        # adjacent to its datum symbol: adjacency conveys the
+                        # association, and a second leader to the same attach
+                        # point would cross the datum box (leaders must not
+                        # cross annotation per Y14.5 practice)
+                        adjacent = abs(qx - ax0) <= 20 * P and abs(qy - ay0) <= 16 * P
+                        if not adjacent:
+                            # attach diverged along the edge from the datum's
+                            # own attach so this leader clears the datum box
+                            att2 = pt
+                            try:
+                                vs2 = e.GetVertices()
+                                a3, b3 = vs2[0], vs2[1]
+                                dx3 = b3.X - a3.X
+                                dy3 = b3.Y - a3.Y
+                                dz3 = b3.Z - a3.Z
+                                ln2 = dx3 * dx3 + dy3 * dy3 + dz3 * dz3
+                                t0 = ((pt.X - a3.X) * dx3 + (pt.Y - a3.Y) * dy3
+                                      + (pt.Z - a3.Z) * dz3) / ln2 if ln2 else 0.5
+                                t2 = t0 + 0.22 if t0 < 0.5 else t0 - 0.22
+                                att2 = NXOpen.Point3d(a3.X + t2 * dx3,
+                                                      a3.Y + t2 * dy3,
+                                                      a3.Z + t2 * dz3)
+                            except Exception:
+                                pass
+                            ld = am.CreateLeaderData()
+                            ld.Leader.SetValue(occ(e), view, att2)
+                            fcf.Leader.Leaders.Append(ld)
                         fcf.Origin.Origin.SetValue(
                             None, None, NXOpen.Point3d(qx, qy, 0.0))
                     fcf.Commit()
