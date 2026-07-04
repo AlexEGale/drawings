@@ -1046,6 +1046,23 @@ def main():
         except Exception:
             pass
 
+    def set_narrow_if_tight(dim, paper_span):
+        """Narrow-dimension presentation when arrows + text cannot fit
+        between the extension lines (~18mm on paper): text offset above a
+        leader stub, per ASME narrow-dimension practice."""
+        if paper_span >= 18 * P:
+            return
+        try:
+            nd = NXOpen.Annotations.NarrowDimensionData()
+            nd.DisplayType = NXOpen.Annotations.NarrowDisplayOption.AboveStub
+            nd.TextOrientation = NXOpen.Annotations.NarrowTextOrientation.Horizontal
+            nd.TextOffset = 8.0 * P
+            nd.LeaderAngle = 60.0
+            dim.SetNarrowDimensionPreferences(nd)
+        except Exception:
+            say("  narrow prefs failed:\n"
+                + traceback.format_exc().splitlines()[-1])
+
     made = 0
     callout_x = {}      # view_name -> placed callout x positions
     datum_origins = {}  # letter -> sheet origin of the datum symbol
@@ -1069,6 +1086,7 @@ def main():
                 else:
                     d = wp.Dimensions.CreateVerticalDimension(dd, opt)
                 set_unidirectional(d)
+                set_narrow_if_tight(d, sp.span * sc)
             elif sp.kind == "pos":
                 h = sp.hole
                 e0, p0 = sp.geo
@@ -1093,6 +1111,7 @@ def main():
                 except Exception:
                     sp.why = "placed, but basic style not applied"
                 set_unidirectional(d)
+                set_narrow_if_tight(d, sp.span * sc)
             elif sp.kind == "dia":
                 h = sp.hole
                 h_ax, v_ax, _ = VIEWDEF[sp.view_name]
